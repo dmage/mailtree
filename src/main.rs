@@ -9,10 +9,12 @@ struct Args {
 }
 
 struct Mail {
+    fake: bool,
     id: String,
     from: String,
     subject: String,
     parent_id: String,
+    references: Vec<String>,
 }
 
 fn convert_mail(m: &ParsedMail) -> Mail {
@@ -31,10 +33,12 @@ fn convert_mail(m: &ParsedMail) -> Mail {
     });
     let parent_id = String::from(references.split_whitespace().last().unwrap_or(""));
     Mail {
+        fake: false,
         id,
         from,
         subject,
         parent_id,
+        references: references.split_whitespace().map(|s| s.to_string()).collect(),
     }
 }
 
@@ -43,8 +47,10 @@ fn print_mails(mails: &Vec<Mail>, parent_id: &String, indent: &str) {
     for mail in mails {
         if mail.parent_id == *parent_id {
             let from = mail.from.chars().take(50).collect::<String>();
-            println!("{:<50} {} {}", from, indent, mail.subject);
-            print_mails(mails, &mail.id, &next_indent);
+            if !mail.fake {
+                println!("{:<50} {} {}", from, indent, mail.subject);
+            }
+            print_mails(mails, &mail.id, if mail.fake { indent } else { &next_indent });
         }
     }
 }
@@ -59,13 +65,26 @@ fn main() {
         let mail = convert_mail(&parsed);
         mails.push(mail);
     }
-    let by_id: HashMap<String, u32> = mails.iter().map(|m| (m.id.clone(), 1)).collect();
+    let mut by_id: HashMap<String, u32> = mails.iter().map(|m| (m.id.clone(), 1)).collect();
     for mail in &mut mails {
-        if mail.parent_id != "" {
-            if !by_id.contains_key(&mail.parent_id) {
-                mail.parent_id = String::from("");
+        for r in &mail.references {
+            if !by_id.contains_key(r) {
+                by_id.insert(r.clone(), 0);
             }
         }
     }
+    for (id, count) in by_id.iter() {
+        if *count == 0 {
+            mails.push(Mail {
+                fake: true,
+                id: id.clone(),
+                from: String::from(""),
+                subject: String::from(""),
+                parent_id: String::from(""),
+                references: Vec::new(),
+            });
+        }
+    }
+
     print_mails(&mails, &String::from(""), "");
 }
